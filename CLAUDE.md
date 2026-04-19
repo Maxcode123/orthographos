@@ -22,21 +22,31 @@ Output is a ranked list of ≤5 suggestions, not a single auto-correction.
 
 - `index.dic`, `index.aff` — Hunspell `el_GR` dictionary. The `.dic` is already fully expanded (828,806 forms); the `.aff` affix rules are kept for reference.
 - `books/` — small Greek corpus (Modern Greek translations of Aeschylus and Plato) used only for frequency data. Literary-biased — a known Phase 1 limitation.
-- `prototype/` — Phase 1 Python implementation.
+- `prototype/` — Phase 1 Python implementation (uv-managed; see `prototype/pyproject.toml`).
   - `spellcheck.py` — pipeline + CLI.
   - `test_cases.tsv` — 47-case regression suite.
   - `frequencies.tsv` — 8,135 word counts; committed so `evaluate` runs without a build step.
+  - `pyproject.toml`, `uv.lock`, `.python-version` — uv project metadata. Run `uv sync` inside `prototype/` to materialize the venv.
 - `SPELL_CHECKER_PLAN.md` — roadmap, open questions, reading list.
 
 ## Running
 
-All commands are module invocations from the repo root:
+Two equivalent entry points. From the **repo root**, using whatever Python 3.10+ is on PATH:
 
 ```
 python3 -m prototype.spellcheck suggest WORD
 python3 -m prototype.spellcheck check FILE_OR_DASH       # `-` reads stdin
 python3 -m prototype.spellcheck build-freq               # regenerate frequencies.tsv from books/
 python3 -m prototype.spellcheck evaluate                 # run test_cases.tsv, report top-1 / top-5
+```
+
+Or from inside **`prototype/`** via the uv-managed venv (picks up the pinned interpreter in `.python-version`):
+
+```
+uv run python -m spellcheck suggest WORD
+uv run python -m spellcheck check FILE_OR_DASH
+uv run python -m spellcheck build-freq
+uv run python -m spellcheck evaluate
 ```
 
 `evaluate` takes ~7s and reports top-1 and top-5 accuracy.

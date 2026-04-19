@@ -1,0 +1,6 @@
+[project]
+name = "orthographos-prototype"
+version = "0.1.0"
+description = "Phase 1 Python prototype for the Orthographos Greek spell checker."
+requires-python = ">=3.10"
+dependencies = []
