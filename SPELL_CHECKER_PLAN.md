@@ -1,50 +1,10 @@
-# Greek Spell Checker — Design & Implementation Plan
+# Greek Spell Checker — Roadmap & Open Questions
 
-A handoff document capturing the design decisions and implementation plan for a Greek language spell checker. Prototype in Python, production implementation in Rust.
-
----
-
-## 1. Architecture Overview
-
-A traditional spell checker is a five-stage pipeline:
-
-```
-lexicon → normalize/tokenize input → detect non-words → generate candidates → score → return ranked suggestions
-```
-
-- **Lexicon**: the authoritative set of valid words (possibly generated from stems + morphology rules rather than stored as a flat list).
-- **Normalize/tokenize**: Unicode normalization and splitting input text into word tokens.
-- **Detect non-words**: for each token, check membership in the lexicon.
-- **Generate candidates**: for non-words, find dictionary entries within small edit distance.
-- **Score & rank**: order candidates by edit distance, frequency, phonetic similarity, and (optionally) context.
-
-Typical output is a ranked list of 3–5 suggestions, not a single auto-correction.
+Forward-looking design plan for a Greek spell checker. Architectural orientation, working invariants, and how to run the prototype live in `CLAUDE.md`; this document covers lexicon sourcing strategy, the Phase 1 → Phase 2 plan, reading list, and the design questions still to resolve.
 
 ---
 
-## 2. Greek-Specific Concerns
-
-Greek is morphologically rich and has Unicode subtleties that must be handled up front.
-
-### Unicode
-- **Normalize everything to NFC** before lexicon lookup. Greek accented characters have both precomposed and decomposed forms (e.g., ά = U+03AC or U+03B1 + U+0301).
-- **Final sigma (ς vs σ)**: same letter, positional variant. Handle in the lexicon or normalize internally.
-- **Case folding**: Greek uppercase drops accents (Άθήνα → ΑΘΗΝΑ). Be careful with case-insensitive matching.
-- **Polytonic vs monotonic**: decide on a target. Modern text is monotonic (acute only); classical and some literary text is polytonic. Start with monotonic.
-
-### Morphology
-- Heavy inflection: nouns/adjectives inflect for gender, number, case; verbs have hundreds of forms per lemma.
-- Either store all inflected forms (large but simple) or use stems + affix rules (compact, principled). Hunspell `el_GR` already does the latter.
-
-### Common Error Classes
-- **Homophone confusions** (ι/η/υ/ει/οι → /i/, ο/ω → /o/, ε/αι → /e/). These are far more common than random typos and should have low edit costs.
-- **Accent errors** (missing/misplaced tonos) — decide whether to treat as errors or softly flag.
-- **Final sigma mistakes** at word boundaries.
-- Standard typos: keyboard adjacency, transposition, insertion, deletion.
-
----
-
-## 3. Lexicon Sourcing
+## 1. Lexicon Sourcing
 
 **Primary source: Hunspell `el_GR` dictionary.**
 - Files: `el_GR.dic` (stems) + `el_GR.aff` (affix rules encoding morphology).
@@ -61,7 +21,7 @@ Greek is morphologically rich and has Unicode subtleties that must be handled up
 
 ---
 
-## 4. Phase 1 — Python Prototype
+## 2. Phase 1 — Python Prototype
 
 **Goal**: lock in design decisions. Not performance, not production. ~200–400 lines total.
 
@@ -91,12 +51,6 @@ Greek is morphologically rich and has Unicode subtleties that must be handled up
 - Measure **top-1 accuracy** (correct suggestion is first) and **top-5 accuracy** (correct suggestion is in the list).
 - This test set becomes the regression suite for Phase 2.
 
-### First-week tasks
-The index.dic and index.aff files are the root of this repo. Book as corpus examples from Project Gutenberg are under books/
-1. [x] Parse the `.dic` file (simpler) and get a flat word list going. Revisit `.aff` expansion later.
-2. [x] Build the minimal pipeline end-to-end.
-3. [x] Assemble the 50–100 item test set and measure baseline accuracy.
-
 ### Results
 
 Implemented in `prototype/`:
@@ -113,7 +67,7 @@ Implemented in `prototype/`:
 
 1. **Norvig's "edits1-or-fall-back-to-edits2" shortcut is wrong for Greek.** Using it, top-5 was 78.7%; always generating both and ranking by `(distance, -freq)` recovered ~13 points. Because Greek is morphologically rich, most words have many distance-1 neighbors, and genuine corrections often need 2 edits (missing accent + missing letter, e.g. `θαλασα → θάλασσα`, `ελαδα → ελλάδα`). Phase 2's `fst::Levenshtein` returns the full set for free.
 
-2. **Pure (distance, frequency) ranking caps top-1 around 60% on this test set.** `αγαπι → αγάπη` loses to `αγαπά`/`αγαπώ` because the Aeschylus+Plato corpus has more verb forms than noun forms. A bigger corpus helps, but the deeper issue is that ι/η/αι edits should be cheaper than arbitrary substitutions — §8 Q2 (weighted edits vs phonetic key) is now evidence-backed, not speculative.
+2. **Pure (distance, frequency) ranking caps top-1 around 60% on this test set.** `αγαπι → αγάπη` loses to `αγαπά`/`αγαπώ` because the Aeschylus+Plato corpus has more verb forms than noun forms. A bigger corpus helps, but the deeper issue is that ι/η/αι edits should be cheaper than arbitrary substitutions — §6 Q1 (weighted edits vs phonetic key) is now evidence-backed, not speculative.
 
 3. **Real-word errors surface and can't be caught at this layer.** `μικρο` is in the dictionary as an unaccented form, so `μικρο → μικρό` can't be flagged without either an n-gram context check or a soft-accent warning pass. Both are deferred to Phase 2+.
 
@@ -121,7 +75,7 @@ Implemented in `prototype/`:
 
 ---
 
-## 5. Phase 2 — Rust Implementation
+## 3. Phase 2 — Rust Implementation
 
 **Goal**: make it fast and deployable. Translate, don't redesign.
 
@@ -155,7 +109,7 @@ Run the Phase 1 test set against the Rust implementation. Accuracy should match 
 
 ---
 
-## 6. Optional Future Extensions
+## 4. Optional Future Extensions
 
 Not part of the initial plan, but possible follow-ups:
 
@@ -167,7 +121,7 @@ Not part of the initial plan, but possible follow-ups:
 
 ---
 
-## 7. Reading List
+## 5. Reading List
 
 ### From Jurafsky & Martin, *Speech and Language Processing*, 3rd ed. (Jan 2026 draft)
 - **Chapter 2** (Words and Tokens) — read end-to-end. Covers Unicode (§2.3), regex (§2.6), tokenization (§2.7–2.8), edit distance (§2.9).
@@ -181,17 +135,10 @@ Not part of the initial plan, but possible follow-ups:
 
 ---
 
-## 8. Open Questions to Resolve
+## 6. Open Questions
 
-Resolved during Phase 1:
-
-- [x] **Monotonic only.** The tokenizer's regex covers the polytonic Unicode block, but no Phase 1 test case uses polytonic text. Revisit only if a polytonic corpus becomes a target.
-- [x] **`.aff` expansion: skip.** The supplied `index.dic` is already a fully-expanded flat list of 828,806 forms. No affix expansion is needed unless we switch source.
-- [x] **Proper nouns: accept silently.** They're already in the supplied lexicon (Άαχεν, Αθήνα, …). Lowercasing the input lets them match without a separate name list.
-- [x] **Unicode + casing:** NFC normalize → lowercase (Python `str.lower`) → rewrite trailing `σ` to `ς`. Tokenizer splits on non-Greek characters, so apostrophes become separators (`σ' αυτό` → two tokens).
-
-Still open (Phase 1 produced evidence, not an answer):
+Phase 1 locked in several decisions (monotonic-only, skip `.aff` expansion, silently accept proper nouns, the NFC+lowercase+`σ→ς` normalization pipeline). Those now live in `CLAUDE.md` as invariants. What remains:
 
 - [ ] **Weighted edits for the ι/η/υ/αι/ει/οι/ο/ω class, or a phonetic-key preprocessing step?** Phase 1 baseline top-1 is 57.4% — a clear signal that uniform edit costs are leaving accuracy on the table. Prototype both in a second Python pass before porting, or do the comparison in Rust where candidate generation is cheap.
 - [ ] **Missing accents: hard error or soft warning?** Currently hard: the unaccented form isn't in the dictionary, so it's flagged. Reclassifying would require tagging edits by severity (tonal-only vs letter change).
-- [ ] **Target accuracy threshold before moving to Phase 2.** Proposed: top-1 ≥ 75% and top-5 ≥ 95% on the Phase 1 test set, conditional on resolving Q2 above.
+- [ ] **Target accuracy threshold before moving to Phase 2.** Proposed: top-1 ≥ 75% and top-5 ≥ 95% on the Phase 1 test set, conditional on resolving Q1 above.
