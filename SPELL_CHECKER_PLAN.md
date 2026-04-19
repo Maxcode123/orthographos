@@ -93,9 +93,31 @@ Greek is morphologically rich and has Unicode subtleties that must be handled up
 
 ### First-week tasks
 The index.dic and index.aff files are the root of this repo. Book as corpus examples from Project Gutenberg are under books/
-1. Parse the `.dic` file (simpler) and get a flat word list going. Revisit `.aff` expansion later.
-2. Build the minimal pipeline end-to-end.
-3. Assemble the 50–100 item test set and measure baseline accuracy.
+1. [x] Parse the `.dic` file (simpler) and get a flat word list going. Revisit `.aff` expansion later.
+2. [x] Build the minimal pipeline end-to-end.
+3. [x] Assemble the 50–100 item test set and measure baseline accuracy.
+
+### Results
+
+Implemented in `prototype/`:
+- `spellcheck.py` — pipeline + CLI (`suggest`, `check`, `build-freq`, `evaluate`). ~170 lines.
+- `frequencies.tsv` — 8,135 entries built from the three texts in `books/`.
+- `test_cases.tsv` — 47 misspelling→correction pairs (missing accents, homophones, double letters, typos, capitalization).
+
+**Baseline accuracy** (distance-1 and distance-2 candidates merged, ranked by `(edit_distance, -frequency)`):
+- top-1: **57.4%**
+- top-5: **91.5%**
+- runtime: ~7s for 47 cases (dominated by `edits2` brute force in Python)
+
+**Findings:**
+
+1. **Norvig's "edits1-or-fall-back-to-edits2" shortcut is wrong for Greek.** Using it, top-5 was 78.7%; always generating both and ranking by `(distance, -freq)` recovered ~13 points. Because Greek is morphologically rich, most words have many distance-1 neighbors, and genuine corrections often need 2 edits (missing accent + missing letter, e.g. `θαλασα → θάλασσα`, `ελαδα → ελλάδα`). Phase 2's `fst::Levenshtein` returns the full set for free.
+
+2. **Pure (distance, frequency) ranking caps top-1 around 60% on this test set.** `αγαπι → αγάπη` loses to `αγαπά`/`αγαπώ` because the Aeschylus+Plato corpus has more verb forms than noun forms. A bigger corpus helps, but the deeper issue is that ι/η/αι edits should be cheaper than arbitrary substitutions — §8 Q2 (weighted edits vs phonetic key) is now evidence-backed, not speculative.
+
+3. **Real-word errors surface and can't be caught at this layer.** `μικρο` is in the dictionary as an unaccented form, so `μικρο → μικρό` can't be flagged without either an n-gram context check or a soft-accent warning pass. Both are deferred to Phase 2+.
+
+4. **Distance-3 corrections exist in natural typos.** `πεδι → παιδί` needs 3 edits. Rare but visible. Phase 2's Levenshtein automaton makes k=3 affordable if warranted.
 
 ---
 
@@ -161,11 +183,15 @@ Not part of the initial plan, but possible follow-ups:
 
 ## 8. Open Questions to Resolve
 
-Things deliberately left unresolved; pick answers during Phase 1:
+Resolved during Phase 1:
 
-- [ ] Monotonic only, or polytonic support?
-- [ ] Weighted edits for ι/η/υ class, or phonetic-key preprocessing?
-- [ ] Handle `.aff` affix expansion in Phase 1, or punt to Phase 2?
-- [ ] Proper nouns: ignore, flag, or maintain a separate name list?
-- [ ] Treat missing accents as errors or soft warnings?
-- [ ] Target accuracy threshold before moving to Phase 2 (e.g., 85% top-5)?
+- [x] **Monotonic only.** The tokenizer's regex covers the polytonic Unicode block, but no Phase 1 test case uses polytonic text. Revisit only if a polytonic corpus becomes a target.
+- [x] **`.aff` expansion: skip.** The supplied `index.dic` is already a fully-expanded flat list of 828,806 forms. No affix expansion is needed unless we switch source.
+- [x] **Proper nouns: accept silently.** They're already in the supplied lexicon (Άαχεν, Αθήνα, …). Lowercasing the input lets them match without a separate name list.
+- [x] **Unicode + casing:** NFC normalize → lowercase (Python `str.lower`) → rewrite trailing `σ` to `ς`. Tokenizer splits on non-Greek characters, so apostrophes become separators (`σ' αυτό` → two tokens).
+
+Still open (Phase 1 produced evidence, not an answer):
+
+- [ ] **Weighted edits for the ι/η/υ/αι/ει/οι/ο/ω class, or a phonetic-key preprocessing step?** Phase 1 baseline top-1 is 57.4% — a clear signal that uniform edit costs are leaving accuracy on the table. Prototype both in a second Python pass before porting, or do the comparison in Rust where candidate generation is cheap.
+- [ ] **Missing accents: hard error or soft warning?** Currently hard: the unaccented form isn't in the dictionary, so it's flagged. Reclassifying would require tagging edits by severity (tonal-only vs letter change).
+- [ ] **Target accuracy threshold before moving to Phase 2.** Proposed: top-1 ≥ 75% and top-5 ≥ 95% on the Phase 1 test set, conditional on resolving Q2 above.
