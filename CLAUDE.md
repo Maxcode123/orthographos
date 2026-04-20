@@ -27,7 +27,8 @@ Output is a ranked list of ≤5 suggestions, not a single auto-correction.
   - `test_cases.tsv` — 47-case regression suite.
   - `frequencies.tsv` — 8,135 word counts; committed so `evaluate` runs without a build step.
   - `pyproject.toml`, `uv.lock`, `.python-version` — uv project metadata. Run `uv sync` inside `prototype/` to materialize the venv.
-- `SPELL_CHECKER_PLAN.md` — roadmap, open questions, reading list.
+- `SPELL_CHECKER_PLAN.md` — project-wide roadmap, open questions, reading list.
+- `plans/features/` — feature-level plans (one file per track). See § Plans.
 
 ## Running
 
@@ -88,6 +89,14 @@ Never declare a change complete without running the test suite against it.
 - A drop in top-5 is a regression. A drop in top-1 is either a regression or a deliberate trade — flag which, either way.
 - When you fix a behaviour that isn't covered, add a line to `test_cases.tsv` so the next regression is caught.
 - There's no CI in this repo; `evaluate` is the closest thing. Type checking and linting aren't wired up, so passing the test suite is the bar.
+
+## Plans
+
+Feature-level plans — new tracks, multi-milestone integrations, subsystem work — live under `plans/features/`, one Markdown file per track. Keeps the repo root uncluttered as work accumulates.
+
+`SPELL_CHECKER_PLAN.md` stays at the root; it's the project-wide roadmap, not a feature plan. Track-specific plans (e.g. `plans/features/POLYTONIC_PLAN.md`) always go in the subdirectory.
+
+When a new track warrants a plan, create it there before starting the work. The plan captures scope, milestones, validation criteria, and open questions so the work doesn't need to re-derive them each session.
 
 ## Commits
 
